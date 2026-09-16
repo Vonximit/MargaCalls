@@ -22,7 +22,38 @@ LLAMA TEXTO(
 LLAMA FOOTER(texto="Hecho con MargaCalls")
 ```
 
-El motor transforma los llamados en una interfaz accesible, adaptable al móvil y segura por defecto.
+El motor transforma los llamados en una interfaz accesible, adaptable al móvil y segura por defecto. Desde v0.2 también puede conservar estado y reaccionar a eventos sin ejecutar texto arbitrario con `eval`.
+
+## Estado y reacciones
+
+```text
+ESTADO(contador=0)
+
+LLAMA TEXTO(
+  contenido="Has llamado {{contador}} veces.",
+  alineacion="centro"
+)
+
+LLAMA BOTON(
+  id="sumar",
+  texto="Llamar otra vez"
+)
+
+AL TOCAR "sumar" HAZ INCREMENTAR(
+  estado="contador"
+)
+```
+
+`{{contador}}` enlaza el contenido con el estado. Cuando se toca el componente identificado como `sumar`, MargaCalls actualiza el valor y vuelve a renderizar la interfaz.
+
+Las acciones incorporadas son:
+
+| Acción | Resultado | Argumentos |
+| --- | --- | --- |
+| `ASIGNAR` | Reemplaza un valor | `estado`, `valor` |
+| `INCREMENTAR` | Suma una cantidad | `estado`, `valor` opcional (1 por defecto) |
+| `DECREMENTAR` | Resta una cantidad | `estado`, `valor` opcional (1 por defecto) |
+| `ALTERNAR` | Cambia verdadero/falso | `estado` |
 
 ## Probar la demostración
 
@@ -55,7 +86,7 @@ Abre `http://localhost:8080`.
 </script>
 ```
 
-## Componentes incluidos en v0.1
+## Componentes incluidos
 
 | Llamado | Propósito | Argumentos principales |
 | --- | --- | --- |
@@ -94,6 +125,23 @@ LLAMA TARJETA(titulo="Una capacidad nueva", texto="Se programó una sola vez.")
 - `MargaCalls.mount(codigo, destino)` monta la página en el navegador.
 - `MargaCalls.register(nombre, renderer)` agrega un componente reutilizable.
 - `MargaCalls.escapeHTML(valor)` permite escapar contenido en extensiones.
+- `MargaCalls.applyAction(estado, evento)` aplica una acción segura y devuelve un estado nuevo.
+
+`mount()` conserva su retorno original: el elemento montado. En v0.2 ese elemento también expone un controlador en `elemento.margaCalls`:
+
+```js
+const elemento = MargaCalls.mount(pagina, "#app");
+
+elemento.margaCalls.getState();
+elemento.margaCalls.setState({ contador: 10 });
+elemento.margaCalls.render();
+```
+
+`setState()` permite conectar datos externos sin abandonar el lenguaje declarativo.
+
+## Seguridad de las reacciones
+
+Los eventos solo pueden invocar las acciones incluidas en la biblioteca. MargaCalls no usa `eval`, `new Function` ni interpreta JavaScript entregado dentro del idioma. El contenido interpolado continúa pasando por el escape HTML de cada componente.
 
 ## Filosofía
 
@@ -108,8 +156,8 @@ No pretende eliminar la programación. Pretende concentrarla: una capacidad se p
 
 ## Ruta propuesta
 
-- v0.1: componentes visuales y temas.
-- v0.2: eventos (`AL tocar ...`) y estado.
+- v0.1: componentes visuales y temas. ✅
+- v0.2: eventos (`AL TOCAR ... HAZ ...`) y estado. ✅
 - v0.3: datos, colecciones y condiciones.
 - v1.0: editor visual y exportación de PWA.
 

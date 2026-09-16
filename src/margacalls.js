@@ -1,4 +1,4 @@
-const VERSION = "0.1.0";
+const VERSION = "0.2.0";
 
 const DEFAULT_THEME = {
   fondo: "#080b14",
@@ -152,13 +152,37 @@ function collectStatements(source) {
 }
 
 function parse(source) {
-  const document = { title: "Mi página", theme: {}, calls: [] };
+  const document = { title: "Mi página", theme: {}, state: {}, calls: [], events: [] };
   for (const statement of collectStatements(source)) {
     const pageMatch = statement.text.match(/^PAGINA\s+(["'])(.*?)\1$/iu);
     if (pageMatch) {
       document.title = pageMatch[2];
       continue;
     }
+
+    const stateMatch = statement.text.match(/^ESTADO\s*\((.*)\)$/iu);
+    if (stateMatch) {
+      document.state = {
+        ...document.state,
+        ...parseArguments(stateMatch[1], statement.line),
+      };
+      continue;
+    }
+
+    const eventMatch = statement.text.match(
+      /^AL\s+TOCAR\s+(["'])(.*?)\1\s+HAZ\s+([\p{L}_][\p{L}\p{N}_-]*)\s*\((.*)\)$/iu,
+    );
+    if (eventMatch) {
+      document.events.push({
+        type: "click",
+        target: eventMatch[2],
+        action: eventMatch[3].toUpperCase(),
+        props: parseArguments(eventMatch[4], statement.line),
+        line: statement.line,
+      });
+      continue;
+    }
+
     const callMatch = statement.text.match(/^(?:LLAMA\s+)?([\p{L}_][\p{L}\p{N}_-]*)\s*\((.*)\)$/iu);
     if (!callMatch) {
       throw new SyntaxError(`Línea ${statement.line}: no entiendo «${statement.text}».`);
@@ -175,6 +199,95 @@ function list(value) {
   if (Array.isArray(value)) return value;
   if (value === undefined || value === null || value === "") return [];
   return [value];
+}
+
+function resolveValue(value, state, line) {
+  if (Array.isArray(value)) return value.map((item) => resolveValue(item, state, line));
+  if (typeof value !== "string") return value;
+
+  const exact = value.match(/^\{\{\s*([\p{L}_][\p{L}\p{N}_-]*)\s*\}\}$/u);
+  if (exact) {
+    if (!Object.hasOwn(state, exact[1])) {
+      throw new ReferenceError(`Línea ${line}: el estado ${exact[1]} no existe.`);
+    }
+    return state[exact[1]];
+  }
+
+  return value.replace(/\{\{\s*([\p{L}_][\p{L}\p{N}_-]*)\s*\}\}/gu, (_, name) => {
+    if (!Object.hasOwn(state, name)) {
+      throw new ReferenceError(`Línea ${line}: el estado ${name} no existe.`);
+    }
+    return String(state[name]);
+  });
+}
+
+function resolveProps(props, state, line) {
+  return Object.fromEntries(
+    Object.entries(props).map(([key, value]) => [key, resolveValue(value, state, line)]),
+  );
+}
+
+function stateName(props, line) {
+  const name = String(props.estado ?? "").trim();
+  if (!/^[\p{L}_][\p{L}\p{N}_-]*$/u.test(name)) {
+    throw new TypeError(`Línea ${line}: la acción necesita un nombre de estado válido.`);
+  }
+  return name;
+}
+
+function numeric(value, action, line) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) {
+    throw new TypeError(`Línea ${line}: ${action} necesita un valor numérico.`);
+  }
+  return number;
+}
+
+function applyAction(currentState, event) {
+  const props = resolveProps(event.props, currentState, event.line);
+  const next = { ...currentState };
+  const name = stateName(props, event.line);
+
+  if (!Object.hasOwn(next, name)) {
+    throw new ReferenceError(`Línea ${event.line}: el estado ${name} no existe.`);
+  }
+
+  switch (event.action) {
+    case "ASIGNAR":
+      if (!Object.hasOwn(props, "valor")) {
+        throw new TypeError(`Línea ${event.line}: ASIGNAR necesita el argumento valor.`);
+      }
+      next[name] = props.valor;
+      break;
+    case "INCREMENTAR":
+      next[name] = numeric(next[name], "INCREMENTAR", event.line)
+        + numeric(props.valor ?? 1, "INCREMENTAR", event.line);
+      break;
+    case "DECREMENTAR":
+      next[name] = numeric(next[name], "DECREMENTAR", event.line)
+        - numeric(props.valor ?? 1, "DECREMENTAR", event.line);
+      break;
+    case "ALTERNAR":
+      next[name] = !Boolean(next[name]);
+      break;
+    default:
+      throw new ReferenceError(`Línea ${event.line}: la acción ${event.action} no existe.`);
+  }
+
+  return next;
+}
+
+function attachCallId(html, id, line) {
+  if (id === undefined || id === null || id === "") return html;
+  const output = String(html);
+  const tagged = output.replace(
+    /^(\s*<[a-z][\w:-]*)(\s|>)/i,
+    `$1 data-mc-id="${escapeHTML(id)}"$2`,
+  );
+  if (tagged === output) {
+    throw new TypeError(`Línea ${line}: un componente con id debe renderizar un elemento HTML raíz.`);
+  }
+  return tagged;
 }
 
 const components = new Map();
@@ -248,12 +361,15 @@ function styles(theme = {}) {
   </style>`;
 }
 
-function render(sourceOrDocument) {
+function render(sourceOrDocument, stateOverride) {
   const document = typeof sourceOrDocument === "string" ? parse(sourceOrDocument) : sourceOrDocument;
+  const state = { ...document.state, ...stateOverride };
   const body = document.calls.map((call) => {
     const renderer = components.get(call.name);
     if (!renderer) throw new ReferenceError(`Línea ${call.line}: el componente ${call.name} no existe.`);
-    return renderer(call.props, { escapeHTML, safeURL });
+    const props = resolveProps(call.props, state, call.line);
+    const html = renderer(props, { escapeHTML, safeURL });
+    return attachCallId(html, props.id, call.line);
   }).join("\n");
   return `${styles(document.theme)}<main class="mc-page" data-margacalls-version="${VERSION}">${body}</main>`;
 }
@@ -263,11 +379,50 @@ function mount(source, target = "#app") {
   const element = typeof target === "string" ? document.querySelector(target) : target;
   if (!element) throw new Error(`No se encontró el destino ${target}.`);
   const ast = parse(source);
+  let state = { ...ast.state };
   document.title = ast.title;
-  element.innerHTML = render(ast);
+
+  const draw = () => {
+    element.innerHTML = render(ast, state);
+    for (const event of ast.events) {
+      const targets = [...element.querySelectorAll("[data-mc-id]")]
+        .filter((node) => node.getAttribute("data-mc-id") === event.target);
+      if (!targets.length) {
+        throw new ReferenceError(
+          `Línea ${event.line}: no existe un componente con id «${event.target}».`,
+        );
+      }
+      for (const node of targets) {
+        node.addEventListener(event.type, (domEvent) => {
+          domEvent.preventDefault();
+          state = applyAction(state, event);
+          draw();
+        });
+      }
+    }
+  };
+
+  const controller = {
+    getState: () => ({ ...state }),
+    setState(patch) {
+      if (!patch || typeof patch !== "object" || Array.isArray(patch)) {
+        throw new TypeError("setState() necesita un objeto.");
+      }
+      state = { ...state, ...patch };
+      draw();
+      return this.getState();
+    },
+    render: draw,
+  };
+
+  Object.defineProperty(element, "margaCalls", {
+    configurable: true,
+    value: controller,
+  });
+  draw();
   return element;
 }
 
-const MargaCalls = { VERSION, parse, render, mount, register, escapeHTML };
-export { VERSION, parse, render, mount, register, escapeHTML };
+const MargaCalls = { VERSION, parse, render, mount, register, escapeHTML, applyAction };
+export { VERSION, parse, render, mount, register, escapeHTML, applyAction };
 export default MargaCalls;

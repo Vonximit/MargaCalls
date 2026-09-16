@@ -19,6 +19,8 @@
       acento2="#22d3ee"
     )
 
+    ESTADO(contador=0)
+
     LLAMA NAVBAR(
       marca="MargaCalls",
       enlaces=["Idea:#idea", "Galería:#galeria", "Contacto:#contacto"]
@@ -38,6 +40,22 @@
       alineacion="centro"
     )
 
+    LLAMA TEXTO(
+      titulo="Ahora también reacciona",
+      contenido="Has llamado {{contador}} veces.",
+      alineacion="centro"
+    )
+
+    LLAMA BOTON(
+      id="sumar",
+      texto="Llamar otra vez",
+      enlace="#sumar"
+    )
+
+    AL TOCAR "sumar" HAZ INCREMENTAR(
+      estado="contador"
+    )
+
     LLAMA GALERIA(
       titulo="Una llamada, muchas formas",
       imagenes=[
@@ -54,7 +72,7 @@
     )
 
     LLAMA FOOTER(
-      texto="MargaCalls v0.1 · Margaret + LuMinis",
+      texto="MargaCalls v0.2 · Margaret + LuMinis",
       enlaces=["GitHub:https://github.com/Vonximit"]
     )
   </script>
