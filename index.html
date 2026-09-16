@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="description" content="Demostración de MargaCalls: crea interfaces web mediante llamados declarativos.">
+  <title>MargaCalls</title>
+</head>
+<body>
+  <div id="app"></div>
+
+  <script id="pagina" type="text/margacalls">
+    PAGINA "MargaCalls — una web hecha con llamados"
+
+    TEMA(
+      fondo="#070712",
+      superficie="#121225",
+      acento="#a855f7",
+      acento2="#22d3ee"
+    )
+
+    LLAMA NAVBAR(
+      marca="MargaCalls",
+      enlaces=["Idea:#idea", "Galería:#galeria", "Contacto:#contacto"]
+    )
+
+    LLAMA HERO(
+      etiqueta="MARGACODE · WEB",
+      titulo="Programa una vez. Después, llama.",
+      texto="Una biblioteca experimental para construir páginas describiendo capacidades, sin repetir cientos de líneas.",
+      boton="Ver cómo funciona",
+      enlace="#idea"
+    )
+
+    LLAMA TEXTO(
+      titulo="La cosa y sus variables",
+      contenido="HERO es la cosa. El título, el color, el texto y el botón son sus variables. MargaCalls conserva la estructura y tú decides la forma.",
+      alineacion="centro"
+    )
+
+    LLAMA GALERIA(
+      titulo="Una llamada, muchas formas",
+      imagenes=[
+        "https://picsum.photos/seed/margacalls-1/900/650|Forma luminosa",
+        "https://picsum.photos/seed/margacalls-2/900/650|Sistema modular",
+        "https://picsum.photos/seed/margacalls-3/900/650|Interfaz viva"
+      ]
+    )
+
+    LLAMA FORMULARIO(
+      titulo="Construyamos algo",
+      campos=["Nombre:text:Tu nombre", "Correo:email:tu@correo.cl", "Idea:text:¿Qué quieres llamar?"],
+      boton="Enviar idea"
+    )
+
+    LLAMA FOOTER(
+      texto="MargaCalls v0.1 · Margaret + LuMinis",
+      enlaces=["GitHub:https://github.com/Vonximit"]
+    )
+  </script>
+
+  <script type="module">
+    import MargaCalls from "./src/margacalls.js";
+    const source = document.querySelector("#pagina").textContent;
+    try {
+      MargaCalls.mount(source, "#app");
+    } catch (error) {
+      document.querySelector("#app").innerHTML = `<pre style="color:#fff;background:#200;padding:24px">${MargaCalls.escapeHTML(error.message)}</pre>`;
+      console.error(error);
+    }
+  </script>
+</body>
+</html>
